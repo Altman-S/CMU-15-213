@@ -50,7 +50,6 @@ void queue_free(queue_t *q) {
     while (cur != NULL) {
         // free the string of each element
         free(cur->value);
-
         nxt = cur->next;
         free(cur);
         cur = nxt;
@@ -98,9 +97,7 @@ bool queue_insert_head(queue_t *q, const char *s) {
     const char *source = s;
     char *destination = newValue;
     for (size_t i = 0; i < numChar + 1; i++) {
-        *destination = *source;
-        destination++;
-        source++;
+        *(destination + i) = *(source + i);
     }
     newH->value = newValue;
 
@@ -152,9 +149,7 @@ bool queue_insert_tail(queue_t *q, const char *s) {
     const char *source = s;
     char *destination = newValue;
     for (size_t i = 0; i < numChar + 1; i++) {
-        *destination = *source;
-        destination++;
-        source++;
+        *(destination + i) = *(source + i);
     }
     newT->value = newValue;
     newT->next = NULL;
@@ -195,17 +190,13 @@ bool queue_remove_head(queue_t *q, char *buf, size_t bufsize) {
     if (q == NULL || q->head == NULL) {
         return false;
     }
-    list_ele_t *rmHead = q->head;
-    q->head = q->head->next;
-    if (q->head->next == NULL) {
-        q->tail = NULL;
-    }
-    q->size -= 1;
+
+    list_ele_t *rmHead = q->head, *newHead = q->head->next;
 
     // copy characters into 'buf'
     if (buf != NULL) {
         char *source = rmHead->value, *destination = buf;
-        for (size_t i = 0; i < bufsize - 1; i++) {
+        for (size_t i = 0; i < bufsize - 1 && *source != '\0'; ++i) {
             *destination = *source;
             destination++;
             source++;
@@ -214,18 +205,14 @@ bool queue_remove_head(queue_t *q, char *buf, size_t bufsize) {
     }
 
     // free all memory of the element
-    char *preChar, *curChar;
-    if (rmHead->value != NULL) {
-        curChar = rmHead->value;
-        while (*curChar != '\0') {
-            preChar = curChar;
-            curChar++;
-            free(preChar);
-        }
-        // free char '\0'
-        free(curChar);
-    }
+    free(rmHead->value);
     free(rmHead);
+
+    q->head = newHead;
+    q->size -= 1;
+    if (rmHead == q->tail) {
+        q->tail = NULL;
+    }
 
     return true;
 }
