@@ -206,21 +206,17 @@ long isLessOrEqual(long x, long y) {
     // But this may overflow if x and y have different sign.
     // Thus we should only use substraction only when x and y have same sign
     // bit. When x and y have same sign bit, we can get result trivally.
-
-    // 6 ops
+    // Subtract when x and y have same sign. 2 possible results.
+    // result < 0, use diffSign; result == 0, use ~(!!diff)
+    // 6 ops + 12 ops + 1 ops = 19 ops
     long xSign = (x >> 63) & 0x1L;
     long ySign = (y >> 63) & 0x1L;
     long xNegativeYNonNegativeFlag = xSign & !ySign;
-
-    // Subtract when x and y have same sign. 2 possible results.
-    // result < 0, use diffSign; result == 0, use ~(!!diff)
-    // 12 ops
     long diff = x + ~y + 1L;
     long diffSign = (diff >> 63) & 0x1L;
     long sameSignFlag = !(xSign ^ ySign);
     long diffNonPositiveFlag = sameSignFlag & (~(!!diff) | diffSign);
 
-    // 1 ops
     return (xNegativeYNonNegativeFlag | diffNonPositiveFlag);
 }
 /*
@@ -233,8 +229,8 @@ long isLessOrEqual(long x, long y) {
  *   Rating: 3
  */
 long replaceByte(long x, long n, long c) {
-    // The main idea is to clear the byte (Step 1) and to replace with c (Step
-    // 2). 6 ops
+    // The main idea is to clear the byte (Step 1) and to replace with c
+    // (Step2). 6 ops
     long shiftNumber = n << 3;
     long byteClear = ~(0xffL << shiftNumber);
     long byteSet = c << shiftNumber;
@@ -292,7 +288,22 @@ long bitMask(long highbit, long lowbit) {
  *   Rating: 4
  */
 long isPalindrome(long x) {
-    return 2L;
+    // The main idea is to reverse high 32 bits,
+    // and then check whether reversed high 32 bits equals to low 32 bits.
+    // 31 ops
+    long r = x >> 32;
+    long mask = 0x55555555L;
+
+    r = ((r & mask) << 1) | ((r >> 1) & mask);
+    mask = 0x33333333L;
+    r = ((r & mask) << 2) | ((r >> 2) & mask);
+    mask = 0x0f0f0f0f0fL;
+    r = ((r & mask) << 4) | ((r >> 4) & mask);
+    mask = 0x00ff00ffL;
+    r = ((r & mask) << 8) | ((r >> 8) & mask);
+    mask = 0x0000ffffL;
+    r = ((r & mask) << 16) | ((r >> 16) & mask);
+    return !!(r ^ (x & 0xffffffffL)) ^ 0x1L;
 }
 /*
  * trueFiveEighths - multiplies by 5/8 rounding toward 0,
@@ -306,7 +317,21 @@ long isPalindrome(long x) {
  *  Rating: 4
  */
 long trueFiveEighths(long x) {
-    return 2L;
+    // The main idea is to process rounding and remiander properly.
+    // When remainder >= 1L, result + 1L.
+    // 19 ops
+    long numberOneEighth = x >> 3;
+    long numberOneSecond = x >> 1;
+    long low3Sign = (x & 0x4L) >> 2;
+    long low1Sign = x & 0x1L;
+    long remainder = low3Sign & low1Sign;
+    long xSign = (x & 0x8000000000000000L) >> 63;
+    long positivePlusSign = ~xSign & remainder;
+    long negativePlusSign = xSign & remainder;
+    long negativeRounding = xSign & !!(x & 0x7L);
+    long result = numberOneEighth + numberOneSecond + negativeRounding +
+                  positivePlusSign + negativePlusSign;
+    return result;
 }
 /*
  * logicalNeg - implement the ! operator, using all of
