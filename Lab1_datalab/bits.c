@@ -125,7 +125,16 @@ extern int printf(const char *, ...);
  *   Rating: 2
  */
 long copyLSB(long x) {
-    return 2;
+    // Do not use shifting.
+    // Check the least significant bit of x (0 or 1)
+    // If 0, result is 0x0000000000000000L(0L), else 0xffffffffffffffffL(-1L).
+    // 3 ops
+    long result = 0xffffffffffffffffL;
+    long lsb = x ^ 0x1L;
+
+    lsb = lsb & 0x1L;
+    result = result + lsb;
+    return result;
 }
 /*
  * dividePower2 - Compute x/(2^n), for 0 <= n <= 62
@@ -136,7 +145,20 @@ long copyLSB(long x) {
  *   Rating: 2
  */
 long dividePower2(long x, long n) {
-    return 2L;
+    // The main idea is that when result is neagtive with some decimals,
+    // we should add 1L to the result which meets the condition (round toward
+    // zero) Do not plus power2minus1, it will overflow. Check whether x is
+    // positive or negative If x is negative, result + 1L (round toward zero),
+    // else result + 0L shifting & remainder: sign for plus 1 14 ops
+    long addend = x & 0x8000000000000000L;
+    long result = x >> n;
+    long shifting = !!n;
+    long remainder = (1L << n) + (-1L);
+
+    remainder = !!(remainder & x);
+    addend = (addend >> 63) & 0x1L & shifting & remainder;
+    result = result + addend;
+    return result;
 }
 /*
  * distinctNegation - returns 1 if x != -x.
@@ -146,7 +168,13 @@ long dividePower2(long x, long n) {
  *   Rating: 2
  */
 long distinctNegation(long x) {
-    return 2;
+    // Use XOR(^) to check whether x == -x
+    // 5 ops
+    long x_negation = ~x + 1L;
+    long result = x ^ x_negation;
+
+    result = !!result;
+    return result;
 }
 /*
  * anyEvenBit - return 1 if any even-numbered bit in word set to 1
@@ -157,7 +185,13 @@ long distinctNegation(long x) {
  *   Rating: 2
  */
 long anyEvenBit(long x) {
-    return 2L;
+    // Use evenBit to check whether there are numbers in the even-numbered bits.
+    // 3 ops
+    long evenBit = 0x5555555555555555L;
+    long result = evenBit & x;
+
+    result = !!result;
+    return result;
 }
 // 3
 /*
@@ -168,7 +202,22 @@ long anyEvenBit(long x) {
  *   Rating: 3
  */
 long isLessOrEqual(long x, long y) {
-    return 2;
+    // The main idea is to compute the difference between x and y: x + ~y + 1
+    // But this may overflow if x and y have different sign.
+    // Thus we should only use substraction only when x and y have same sign
+    // bit. When x and y have same sign bit, we can get result trivally.
+    // Subtract when x and y have same sign. 2 possible results.
+    // result < 0, use diffSign; result == 0, use ~(!!diff)
+    // 6 ops + 12 ops + 1 ops = 19 ops
+    long xSign = (x >> 63) & 0x1L;
+    long ySign = (y >> 63) & 0x1L;
+    long xNegativeYNonNegativeFlag = xSign & !ySign;
+    long diff = x + ~y + 1L;
+    long diffSign = (diff >> 63) & 0x1L;
+    long sameSignFlag = !(xSign ^ ySign);
+    long diffNonPositiveFlag = sameSignFlag & (~(!!diff) | diffSign);
+
+    return (xNegativeYNonNegativeFlag | diffNonPositiveFlag);
 }
 /*
  * replaceByte(x,n,c) - Replace byte n in x with c
@@ -180,7 +229,16 @@ long isLessOrEqual(long x, long y) {
  *   Rating: 3
  */
 long replaceByte(long x, long n, long c) {
-    return 2;
+    // The main idea is to clear the byte (Step 1) and to replace with c
+    // (Step2). 6 ops
+    long shiftNumber = n << 3;
+    long byteClear = ~(0xffL << shiftNumber);
+    long byteSet = c << shiftNumber;
+    long result = x;
+
+    result = result & byteClear;
+    result = result | byteSet;
+    return result;
 }
 /*
  * conditional - same as x ? y : z
@@ -190,7 +248,14 @@ long replaceByte(long x, long n, long c) {
  *   Rating: 3
  */
 long conditional(long x, long y, long z) {
-    return 2L;
+    // The main idea is to use the condition to select y and z respectively
+    // x is used to generate the condition (0xffffffffffffffffL and
+    // 0x0000000000000000L) 7 ops
+    long conditionZ = (!!x) + 0xffffffffffffffffL;
+    long conditionY = ~conditionZ;
+    long result = (conditionY & y) | (conditionZ & z);
+
+    return result;
 }
 /*
  * bitMask - Generate a mask consisting of all 1's
@@ -203,7 +268,16 @@ long conditional(long x, long y, long z) {
  *   Rating: 3
  */
 long bitMask(long highbit, long lowbit) {
-    return 2L;
+    // The main idea is such this: 0x11111100L ^ 0x11110000L = 0x00001100L
+    // 15 ops
+    long diffSign = (lowbit + ~highbit) >> 63;
+    long bitAssist = 0x8000000000000000L;
+    long maskLow = bitAssist >> (63 + ~lowbit + 1);
+    long maskHigh = bitAssist >> (63 + ~highbit + 1);
+    long bitAdd = 0x1L << highbit;
+    long result = (maskLow ^ maskHigh) | bitAdd;
+
+    return result & diffSign;
 }
 // 4
 /*
@@ -214,7 +288,22 @@ long bitMask(long highbit, long lowbit) {
  *   Rating: 4
  */
 long isPalindrome(long x) {
-    return 2L;
+    // The main idea is to reverse high 32 bits,
+    // and then check whether reversed high 32 bits equals to low 32 bits.
+    // 31 ops
+    long r = x >> 32;
+    long mask = 0x55555555L;
+
+    r = ((r & mask) << 1) | ((r >> 1) & mask);
+    mask = 0x33333333L;
+    r = ((r & mask) << 2) | ((r >> 2) & mask);
+    mask = 0x0f0f0f0f0fL;
+    r = ((r & mask) << 4) | ((r >> 4) & mask);
+    mask = 0x00ff00ffL;
+    r = ((r & mask) << 8) | ((r >> 8) & mask);
+    mask = 0x0000ffffL;
+    r = ((r & mask) << 16) | ((r >> 16) & mask);
+    return !!(r ^ (x & 0xffffffffL)) ^ 0x1L;
 }
 /*
  * trueFiveEighths - multiplies by 5/8 rounding toward 0,
@@ -228,7 +317,21 @@ long isPalindrome(long x) {
  *  Rating: 4
  */
 long trueFiveEighths(long x) {
-    return 2L;
+    // The main idea is to process rounding and remiander properly.
+    // When remainder >= 1L, result + 1L.
+    // 19 ops
+    long numberOneEighth = x >> 3;
+    long numberOneSecond = x >> 1;
+    long low3Sign = (x & 0x4L) >> 2;
+    long low1Sign = x & 0x1L;
+    long remainder = low3Sign & low1Sign;
+    long xSign = (x & 0x8000000000000000L) >> 63;
+    long positivePlusSign = ~xSign & remainder;
+    long negativePlusSign = xSign & remainder;
+    long negativeRounding = xSign & !!(x & 0x7L);
+    long result = numberOneEighth + numberOneSecond + negativeRounding +
+                  positivePlusSign + negativePlusSign;
+    return result;
 }
 /*
  * logicalNeg - implement the ! operator, using all of
@@ -239,5 +342,15 @@ long trueFiveEighths(long x) {
  *   Rating: 4
  */
 long logicalNeg(long x) {
-    return 2L;
+    // We do not need to understand how it works, just use the effect
+    // 14 ops
+    long smeard = x;
+
+    smeard = smeard | smeard >> 32;
+    smeard = smeard | smeard >> 16;
+    smeard = smeard | smeard >> 8;
+    smeard = smeard | smeard >> 4;
+    smeard = smeard | smeard >> 2;
+    smeard = smeard | smeard >> 1;
+    return (~smeard & 1L);
 }
