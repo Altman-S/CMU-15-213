@@ -1,0 +1,27 @@
+Border relations with Canada have never been better.
+
+1 2 4 8 16 32
+
+6 682
+
+7 0
+
+"flyers" "abcdef"->"aduier" "ghijkl"->"snfotv" "mnopqr"->"bylmad" 
+"stuvwx"->"uiersn" "yzabcd"->"foadui"
+ionefg
+
+6 5 4 3 2 1
+(gdb) print *(int *) 0x6032d0
+$34 = 332
+(gdb) print *(int *) *(0x6032d0+0x8)
+$35 = 168
+(gdb) print *(int *) *(*(0x6032d0+0x8)+0x8)
+$36 = 924
+(gdb) print *(int *) *(*(*(0x6032d0+0x8)+0x8)+0x8)
+$37 = 691
+(gdb) print *(int *) *(*(*(*(0x6032d0+0x8)+0x8)+0x8)+0x8)
+$38 = 477
+(gdb) print *(int *) *(*(*(*(*(0x6032d0+0x8)+0x8)+0x8)+0x8)+0x8)
+$39 = 443
+
+3 4 5 6 1 2 -> 4 3 2 1 6 5
