@@ -67,9 +67,9 @@ void cache_init() {
     /* initialise tag_mask, set_mask and offset_mask */
     offset_mask = (1ULL << globalArgs.b) - 1;
     set_mask = ((1ULL << (globalArgs.s + globalArgs.b)) - 1) ^ offset_mask;
-    tag_set = 0xffffffffffffffff - set_mask - offset_mask;
+    tag_mask = 0xffffffffffffffff - set_mask - offset_mask;
     /* initialise the file pointer */
-    fp = fopen(globalArgs.t, 'r');
+    fp = fopen(globalArgs.inputFile, "r");
 }
 
 
@@ -115,19 +115,19 @@ int access_mem(unsigned long addr, int type, int time) {
                 /* if type is M, there must be a second ref hit */
                 if (type == 'M') 
                     printf("hit\n");
-                else:
+                else
                     printf("\n");
             }
             return 0;
         }
         /* detect empty slot */
-        else if (!cache[set * globalArgs + i].valid) {
+        else if (!cache[set * globalArgs.E + i].valid) {
             first_empty = i;
             break;
         }
         /* find lru time and position */
-        else if (cache[set * globalArgs + i].time_updated < lru_time) {
-            lru_time = cache[set * globalArgs.E + i];
+        else if (cache[set * globalArgs.E + i].time_updated < lru_time) {
+            lru_time = cache[set * globalArgs.E + i].time_updated;
             lru_pos = i;
         }
     }
@@ -136,27 +136,27 @@ int access_mem(unsigned long addr, int type, int time) {
     if (first_empty != -1) {
         cache[set * globalArgs.E + first_empty].valid = 1;
         cache[set * globalArgs.E + first_empty].tag = tag;
-        cache[set * globalArgs.E + first_empty].time = time;
+        cache[set * globalArgs.E + first_empty].time_updated = time;
         if (globalArgs.vebosity) {
-            print("miss ");
+            printf("miss ");
             /* if type is M, there must be a second ref hit */
             if (type == 'M')
                 printf("hit\n");
-            else:
+            else
                 printf("\n");
         }
         return 1;
     }
     /* capacity miss, need eviction */
     else {
-        cache[set * globalArgs.E + lru.pos].tag = tag;
-        cache[set * globalArgs.E + lru.pos].time_updated = time;
+        cache[set * globalArgs.E + lru_pos].tag = tag;
+        cache[set * globalArgs.E + lru_pos].time_updated = time;
         if (globalArgs.vebosity) {
-            print("miss eviction ");
+            printf("miss eviction ");
             /* if type is M, there must be a second ref hit */
             if (type == 'M')
                 printf("hit\n");
-            else:
+            else
                 printf("\n");
         }
         return 2;
@@ -165,7 +165,7 @@ int access_mem(unsigned long addr, int type, int time) {
 
 
 /* execute each instruction */
-void run() {
+void run(int* count) {
     char buf[BUF_SIZE];    /* buffer for input */
     unsigned long addr;    /* data address */
     int type;              /* current cache access type */
@@ -210,7 +210,7 @@ void run() {
 
 
 
-int main(int agrc, char** agrv) {
+int main(int argc, char** argv) {
     /* initialization */
     int opt = 0;
     globalArgs.help = 0;
@@ -235,7 +235,7 @@ int main(int agrc, char** agrv) {
                 globalArgs.b = atoi(optarg);
                 break;
             case 't':
-                globalArgs.t = optarg;
+                globalArgs.inputFile = optarg;
                 break;
             case '?':
                 /* Fall through */
@@ -250,7 +250,7 @@ int main(int agrc, char** agrv) {
 
     /* check for mandatory options and constrains */
     if (globalArgs.s <= 0 || globalArgs.E <= 0 || globalArgs.b <= 0 || globalArgs.inputFile == NULL) {
-        printf("%s: Missing required command line argument\n", avgv[0]);
+        printf("%s: Missing required command line argument\n", argv[0]);
         print_usage();
         return 0;
     }
@@ -259,7 +259,7 @@ int main(int agrc, char** agrv) {
     cache_init();
     run(count);
     cache_exit();
-    printSummary(dest[0], dest[1], dest[2]);
+    printSummary(count[0], count[1], count[2]);
     return 0;
 }
 
