@@ -13,7 +13,76 @@
 #include <stdio.h>
 #include "cachelab.h"
 
+/* 
+ * s = 5, E = 1, b = 5
+ * b = 5 -> block/line size = 32 bytes = 8 ints
+ * E = 1 -> each set contains 1 line
+ * s = 5 -> 32 sets
+ * Cache size: 8 * 32 = 256 ints
+ */
+
+
 int is_transpose(int M, int N, int A[N][M], int B[M][N]);
+
+
+/*
+ * Use 8 x 8 blocks, reason:
+ * for N = M = 32, each row contains 32 ints, so the cache can store
+ * at most 8 rows of input. Thus, block size <= 8, int general, we need
+ * to make the block size as much as possible, so we choose 8.
+ * 
+ * The diagonal block should cause 23 misses: 23 = 7 + 2 * 8
+ * The non-diagonal block should case 16 misses: 16 = 2 * 8
+ * When M = N = 32, 287 = 16 * 12 + 23 * 4 + 3, very close to estimation.
+ * Actually, the extra 3 misses are for function
+ */
+void blocksize_8_32_32(int N, int M, int A[N][M], int B[M][N]) {
+    int i, j, k, l, diag;  // i, j for block index; k, l for element index in block
+    for (i = 0; i < N; i += 8) {
+        for (j = 0; j < M; j += 8) {
+            for (k = 0; k < 8; ++k) {
+                for (l = 0; l < 8; ++l) {
+                    if (i + k == j + l) {  // diagonal block
+                        diag = i + k;
+                        continue;
+                    }
+                    B[j + l][i + k] = A[i + k][j + l];
+                }
+                if (i == j) {
+                    B[diag][diag] = A[diag][diag];
+                }
+            }
+        }    
+    }
+}
+
+
+/* 
+ * Use 4 x 4 blocks, reason is same as matrix 32 x 32
+ * The cache can store at most 4 rows of input matrix.
+ * num of diagonal blocks: 16 = 64 / 4
+ * num of non-diagonal blocks: 240 = 16 * 16 - 16
+ */
+void blocksize_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
+    int i, j, k, l, diag;  // i, j for block index; k, l for element index in block
+    for (i = 0; i < N; i += 4) {
+        for (j = 0; j < M; j += 4) {
+            for (k = 0; k < 4; ++k) {
+                for (l = 0; l < 4; ++l) {
+                    if (i + k == j + l) {  // diagonal block
+                        diag = i + k;
+                        continue;
+                    }
+                    B[j + l][i + k] = A[i + k][j + l];
+                }
+                if (i == j) {
+                    B[diag][diag] = A[diag][diag];
+                }
+            }
+        }
+    }
+}
+
 
 /* 
  * transpose_submit - This is the solution transpose function that you
@@ -23,52 +92,12 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
  *     be graded. 
  */
 char transpose_submit_desc[] = "Transpose submission";
-void transpose_submit(int M, int N, int A[N][M], int B[M][N])
-{
-    /* b = 5, each bloack contains 32 bytes (8 int) */
-    int i, j, i1, j1, diag;
-
+void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
     if (M == 32 && N == 32) {
-        for (i = 0; i < N; i += 8) {
-            for (j = 0; j < M; j += 8) {
-                /* b * b mini matrix transpose */
-                for (i1 = i; i1 < i + 8; ++i1) {
-                    for (j1 = j; j1 < j + 8; ++j1) {
-                        if (i1 == j1) {
-			    diag = i1;
-			    continue;
-			}
-			B[j1][i1] = A[i1][j1];
-                    }
-		    if (i == j)
-			B[diag][diag] = A[diag][diag];
-                }
-            }
-        }
+        blocksize_8_32_32(N, M, A, B);
     }
     else if (M == 64 && N == 64) {
-        for (i = 0; i < N; i += 8) {
-            for (j = 0; j < M; j += 8) {
-                /* b * b mini matrix transpose */
-                for (i1 = i; i1 < i + 8; ++i1) {
-                    for (j1 = j; j1 < j + 8; ++j1) {
-                        B[j1][i1] = A[i1][j1];
-                    }
-                }
-            }
-        }
-    }
-    else {
-        for (i = 0; i < N; i += 8) {
-            for (j = 0; j < M; j += 8) {
-                /* b * b mini matrix transpose */
-                for (i1 = i; i1 < i + 8 && i1 < N; ++i1) {
-                    for (j1 = j; j1 < j + 8 && j1 < M; ++j1) {
-                        B[j1][i1] = A[i1][j1];
-                    }
-                }
-            }
-        }
+        blocksize_4_64_64(N, M, A, B);
     }
 }
 
