@@ -63,7 +63,7 @@ void blocksize_8_32_32(int N, int M, int A[N][M], int B[M][N]) {
  * num of diagonal blocks: 16 = 64 / 4
  * num of non-diagonal blocks: 240 = 16 * 16 - 16
  *
- * 4 x 4: ? misses
+ * 4 x 4: 1795 misses
  */
 void blocksize_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
     int i, j, k, l, diag;  // i, j for block index; k, l for element index in block
@@ -89,7 +89,7 @@ void blocksize_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
 /* 
  * Use 8 x 8 blocks, but apply some optimization
  * Use B as cache
- * 
+ * 8 x 8 (4): 1171 misses
  */
 void blocksize_8_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
     int i, j, k, l;
@@ -151,17 +151,17 @@ void blocksize_8_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
 /* 
  * The requirement is not too tight, try different block sizes
  * also no need to consider diagonal
- * 4 x 4:
- * 8 x 8:
- * 16 x 16: 
+ * 4 x 4: 2425 misses
+ * 8 x 8: 2118 misses
+ * 16 x 16: 1192 misses 
  */
 void blocksize_16_61_67(int N, int M, int A[N][M], int B[M][N]) {
     int i, j, k, l;
-    int size = 16;
+    int size = 4;
     for (i = 0; i < N; i += size) {
         for (j = 0; j < M; j += size) {
-            for (k = 0; k < size; ++k) {
-                for (l = 0; l < size; ++l) {
+            for (k = 0; k < size && i + k < N; ++k) {
+                for (l = 0; l < size && j + l < M; ++l) {
                     B[j + l][i + k] = A[i + k][j + l];
                 }
             }
@@ -183,8 +183,8 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
         blocksize_8_32_32(N, M, A, B);
     }
     else if (M == 64 && N == 64) {
-        blocksize_4_64_64(N, M, A, B);
-        // blocksize_8_4_64_64(N, M, A, B);
+        // blocksize_4_64_64(N, M, A, B);
+        blocksize_8_4_64_64(N, M, A, B);
     }
     else {
         blocksize_16_61_67(N, M, A, B);
