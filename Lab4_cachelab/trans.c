@@ -6,6 +6,9 @@
  *
  * A transpose function is evaluated by counting the number of misses
  * on a 1KB direct mapped cache with a block size of 32 bytes.
+ *
+ * Pi
+ * April 28 2023
  */ 
 #include <stdio.h>
 #include "cachelab.h"
@@ -22,6 +25,20 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
+    int i, j, k;
+    int tmp;
+    int b = 32;
+    for (i = 0; i < N; i += b) {
+        for (j = 0; j < M; j += b) {
+            /* b * b mini matrix transpose */
+            for (int i1 = i; i1 < i + b; ++i1) {
+                for (int j1 = j; j1 < j + b; ++j1) {
+                    tmp = A[i1][j1];
+                    B[j1][i1] = tmp;
+                }
+            }
+        }
+    }
 }
 
 /* 
