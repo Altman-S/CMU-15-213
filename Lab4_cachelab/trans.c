@@ -157,7 +157,7 @@ void blocksize_8_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
  */
 void blocksize_16_61_67(int N, int M, int A[N][M], int B[M][N]) {
     int i, j, k, l;
-    int size = 4;
+    int size = 16;
     for (i = 0; i < N; i += size) {
         for (j = 0; j < M; j += size) {
             for (k = 0; k < size && i + k < N; ++k) {
