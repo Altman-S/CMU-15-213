@@ -62,6 +62,8 @@ void blocksize_8_32_32(int N, int M, int A[N][M], int B[M][N]) {
  * The cache can store at most 4 rows of input matrix.
  * num of diagonal blocks: 16 = 64 / 4
  * num of non-diagonal blocks: 240 = 16 * 16 - 16
+ *
+ * 4 x 4: ? misses
  */
 void blocksize_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
     int i, j, k, l, diag;  // i, j for block index; k, l for element index in block
@@ -85,6 +87,90 @@ void blocksize_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
 
 
 /* 
+ * Use 8 x 8 blocks, but apply some optimization
+ * Use B as cache
+ * 
+ */
+void blocksize_8_4_64_64(int N, int M, int A[N][M], int B[M][N]) {
+    int i, j, k, l;
+    int a0, a1, a2, a3, a4, a5, a6, a7;
+    for (i = 0; i < N; i += 8) {
+        for (j = 0; j < M; j += 8) {
+            for (k = i ; k < i + 4; ++k) {
+                a0 = A[k][j];
+                a1 = A[k][j + 1];
+                a2 = A[k][j + 2];
+                a3 = A[k][j + 3];
+                a4 = A[k][j + 4];
+                a5 = A[k][j + 5];
+                a6 = A[k][j + 6];
+                a7 = A[k][j + 7];
+
+                B[j][k] = a0;
+                B[j + 1][k] = a1;
+                B[j + 2][k] = a2;
+                B[j + 3][k] = a3;
+
+                B[j][k + 4] = a4;
+                B[j + 1][k + 4] = a5;
+                B[j + 2][k + 4] = a6;
+                B[j + 3][k + 4] = a7;
+            }
+
+            for (l = j + 4; l < j + 8; ++l) {
+                a4 = A[i + 4][l - 4]; // A left-down col
+                a5 = A[i + 5][l - 4];
+                a6 = A[i + 6][l - 4];
+                a7 = A[i + 7][l - 4];
+
+                a0 = B[l - 4][i + 4]; // B right-up line
+                a1 = B[l - 4][i + 5];
+                a2 = B[l - 4][i + 6];
+                a3 = B[l - 4][i + 7];
+
+                B[l - 4][i + 4] = a4; // set B right-up line 
+                B[l - 4][i + 5] = a5;
+                B[l - 4][i + 6] = a6;
+                B[l - 4][i + 7] = a7;
+
+                B[l][i] = a0;         // set B left-down col
+                B[l][i + 1] = a1;
+                B[l][i + 2] = a2;
+                B[l][i + 3] = a3;
+
+                B[l][i + 4] = A[i + 4][l];  // transpose right-down of A and B
+                B[l][i + 5] = A[i + 5][l];
+                B[l][i + 6] = A[i + 6][l];
+                B[l][i + 7] = A[i + 7][l];
+            }
+        }
+    }
+}
+
+
+/* 
+ * The requirement is not too tight, try different block sizes
+ * also no need to consider diagonal
+ * 4 x 4:
+ * 8 x 8:
+ * 16 x 16: 
+ */
+void blocksize_16_61_67(int N, int M, int A[N][M], int B[M][N]) {
+    int i, j, k, l;
+    int size = 16;
+    for (i = 0; i < N; i += size) {
+        for (j = 0; j < M; j += size) {
+            for (k = 0; k < size; ++k) {
+                for (l = 0; l < size; ++l) {
+                    B[j + l][i + k] = A[i + k][j + l];
+                }
+            }
+        }
+    }
+}
+
+
+/* 
  * transpose_submit - This is the solution transpose function that you
  *     will be graded on for Part B of the assignment. Do not change
  *     the description string "Transpose submission", as the driver
@@ -98,6 +184,10 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
     }
     else if (M == 64 && N == 64) {
         blocksize_4_64_64(N, M, A, B);
+        // blocksize_8_4_64_64(N, M, A, B);
+    }
+    else {
+        blocksize_16_61_67(N, M, A, B);
     }
 }
 
