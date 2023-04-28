@@ -26,16 +26,22 @@ char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
     /* b = 5, each bloack contains 32 bytes (8 int) */
-    int i, j, i1, j1, tmp;
+    int i, j, i1, j1, diag;
 
     if (M == 32 && N == 32) {
         for (i = 0; i < N; i += 8) {
             for (j = 0; j < M; j += 8) {
                 /* b * b mini matrix transpose */
-                for (i1 = i; i1 < i + 8; ++i) {
-                    for (j1 = j; j1 < j + 8; ++j) {
-                        B[j1][i1] = A[i1][j1];
+                for (i1 = i; i1 < i + 8; ++i1) {
+                    for (j1 = j; j1 < j + 8; ++j1) {
+                        if (i1 == j1) {
+			    diag = i1;
+			    continue;
+			}
+			B[j1][i1] = A[i1][j1];
                     }
+		    if (i == j)
+			B[diag][diag] = A[diag][diag];
                 }
             }
         }
@@ -44,8 +50,8 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
         for (i = 0; i < N; i += 8) {
             for (j = 0; j < M; j += 8) {
                 /* b * b mini matrix transpose */
-                for (i1 = i; i1 < i + 8; ++i) {
-                    for (j1 = j; j1 < j + 8; ++j) {
+                for (i1 = i; i1 < i + 8; ++i1) {
+                    for (j1 = j; j1 < j + 8; ++j1) {
                         B[j1][i1] = A[i1][j1];
                     }
                 }
@@ -56,8 +62,8 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
         for (i = 0; i < N; i += 8) {
             for (j = 0; j < M; j += 8) {
                 /* b * b mini matrix transpose */
-                for (i1 = i; i1 < i + 8 && i1 < N; ++i) {
-                    for (j1 = j; j1 < j + 8 && j1 < M; ++j) {
+                for (i1 = i; i1 < i + 8 && i1 < N; ++i1) {
+                    for (j1 = j; j1 < j + 8 && j1 < M; ++j1) {
                         B[j1][i1] = A[i1][j1];
                     }
                 }
