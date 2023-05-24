@@ -1,7 +1,8 @@
 /* 
  * tsh - A tiny shell program with job control
  * 
- * <Put your name and login ID here>
+ * Pi
+ * May 21, 2023
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,6 +74,7 @@ void initjobs(struct job_t *jobs);
 int maxjid(struct job_t *jobs); 
 int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline);
 int deletejob(struct job_t *jobs, pid_t pid); 
+void setjobstate(struct job_t *jobs, pid_t pid, int new_state);
 pid_t fgpid(struct job_t *jobs);
 struct job_t *getjobpid(struct job_t *jobs, pid_t pid);
 struct job_t *getjobjid(struct job_t *jobs, int jid); 
@@ -165,6 +167,47 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline) 
 {
+    char *argv[MAXARGS];  /* Argument list execve() */
+    char buf[MAXLINE];    /* Holds modified command line */
+    int bg;               /* Should the job run in bg of fg? */
+    pid_t pid;            /* Process id */
+
+    strcpy(buf, cmdline);
+    bg = parseline(buf, argv);
+    if (argv[0] == NULL)
+	return;   /* Ignore empty lines */
+
+    sigset_t mask_all, mask_one, prev_one;  /* Blocking strategy used for avoiding race */
+    sigfillset(&mask_all);
+    sigemptyset(&mask_one);
+    sigaddset(&mask_one, SIGCHLD);
+
+    if (!builtin_cmd(argv)) {
+	sigprocmask(SIG_BLOCK, &mask_one, &prev_one);  /* Block SIGCHLD */
+        if ((pid = fork()) == 0) {   /* Child process */
+	    setpgid(0, 0);  /* Put the child in a new process group */
+	    sigprocmask(SIG_SETMASK, &prev_one, NULL); /* Unblock SIGCHLD */
+	    if (execve(argv[0], argv, environ) < 0) {
+	        printf("%s: Command not found.\n", argv[0]);
+		exit(0);
+	    }
+	}
+	
+	int currentjid = nextjid;
+	sigprocmask(SIG_BLOCK, &mask_all, NULL);  /* Parent process */
+	if (bg) {
+	    addjob(jobs, pid, BG, buf);  /* Add the child to background job list */
+	    printf("[%d] (%d) %s", currentjid, pid, buf);
+	} else {
+	    addjob(jobs, pid, FG, buf);  /* Add the child to foreground job list */
+	}
+	sigprocmask(SIG_SETMASK, &prev_one, NULL);  /* Unblock SIGCHLD */
+
+	/* Parent waits for foreground job to terminate */
+	if (!bg)
+	    waitfg(pid);
+    }
+
     return;
 }
 
@@ -231,6 +274,21 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if (!strcmp(argv[0], "quit"))  /* quit command */
+	exit(0);
+    if (!strcmp(argv[0], "jobs")) {  /* jobs command */
+    	listjobs(jobs);
+	return 1;
+    }
+    else if (!strcmp(argv[0], "bg")) {  /* bg command */
+        do_bgfg(argv);
+	return 1;
+    }
+    else if (!strcmp(argv[0], "fg")) {  /* fg command */
+    	do_bgfg(argv);
+	return 1;
+    }
+
     return 0;     /* not a builtin command */
 }
 
@@ -239,7 +297,67 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
-    return;
+    /* Get PID or JID number */
+    long num;
+    if (*(argv[1]) == '%') {
+    	num = strtol(argv[1] + 1, NULL, 10);
+    }
+    else {
+        num = strtol(argv[1], NULL, 10);
+    }
+
+    /* Handle some edge cases */
+    if (num <= 0) {
+        return;
+    }
+    if (argv[2] != 0) {
+        return;
+    }
+
+    /* Check whether JID or PID is valid */
+    int bg = (strcmp(argv[0], "bg") == 0);
+    int pid = -1, jid = -1;
+    struct job_t *job;
+    sigset_t mask_all, prev_mask;
+    sigfillset(&mask_all); 
+    sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
+    if (*(argv[1]) == '%') {  /* For JID */
+	jid = num;
+        job = getjobjid(jobs, jid);
+	if (!jid) {
+	    printf("%%%d: No such job\n", jid);
+	    sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+	    return;
+	}
+	pid = job->pid;
+    }
+    else {  /* For PID */
+        pid = num;
+	job = getjobpid(jobs, pid);
+	if (!job) {
+	    printf("%%%d: No such process\n", pid);
+	    sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+	    return;
+	}
+	jid = job->jid;
+    }
+    sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+    
+    /* Send SIGCONT signal */
+    if (bg) {
+        printf("[%d] (%d) %s", jid, pid, job->cmdline);
+	kill(-pid, SIGCONT);
+	sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
+	setjobstate(jobs, pid, BG);
+	sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+    }
+    else {
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
+        setjobstate(jobs, pid, FG);
+        sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+	kill(-pid, SIGCONT);
+	waitfg(pid);
+    }
 }
 
 /* 
@@ -247,7 +365,27 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
-    return;
+    sigset_t mask_all, prev_mask;
+    int jid = 0;
+    int state = UNDEF;  /* 0 for UNDEF, 1 for FG, 2 for BG, 3 for ST */  
+    
+    sigfillset(&mask_all);
+    while (1) {
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);  /* Block all signals */
+        // jid = pid2jid(pid);
+	struct job_t *fb_job = getjobpid(jobs, pid);
+        if (fb_job->state) {
+	    state = fb_job->state;
+	}
+        sigprocmask(SIG_SETMASK, &prev_mask, NULL);  /* Unblock all signals */
+
+	if (jid == 0 || (state != UNDEF && state != FG)) {
+	    /* Job deleted or no longer foreground */
+	    return;
+	}
+
+	sleep(1);
+    }
 }
 
 /*****************
@@ -263,7 +401,20 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
-    return;
+    int olderrno = errno;
+    sigset_t mask_all, prev_mask;
+    pid_t pid;
+
+    sigfillset(&mask_all);
+    while ((pid = waitpid(-1, NULL, 0)) > 0) {  /* Reap child */
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
+	deletejob(jobs, pid);  /* Delete the child from the job list */
+	sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+    }
+    if (pid != 0 && errno != ECHILD)
+	app_error("waitpid error");
+
+    errno = olderrno;
 }
 
 /* 
@@ -273,7 +424,13 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
-    return;
+    int olderrno = errno;
+    sigset_t mask_all, prev_mask;
+    sigfillset(&mask_all);
+    sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
+    kill(-(fgpid(jobs)), SIGINT);  /* Send SIGINT to current foreground job */
+    sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+    errno = olderrno;
 }
 
 /*
@@ -283,7 +440,13 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
-    return;
+    int olderrno = errno;
+    sigset_t mask_all, prev_mask;
+    sigfillset(&mask_all);
+    sigprocmask(SIG_BLOCK, &mask_all, &prev_mask);
+    kill(-(fgpid(jobs)), SIGTSTP);  /* send SIGTSTP to current ground job */
+    sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+    errno = olderrno;
 }
 
 /*********************
@@ -363,6 +526,17 @@ int deletejob(struct job_t *jobs, pid_t pid)
 	}
     }
     return 0;
+}
+
+/* setjobstate - Set the state of a job whose PID = pid to target state in the job list */
+void setjobstate(struct job_t *jobs, pid_t pid, int new_state) {
+    if (pid <= 0) return;
+    for (int i = 0; i < MAXJOBS; ++i) {
+        if (jobs[i].pid == pid) {
+	    jobs[i].state = new_state;
+	    return;
+	}
+    }
 }
 
 /* fgpid - Return PID of current foreground job, 0 if no such job */
